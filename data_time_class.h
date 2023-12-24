@@ -53,8 +53,8 @@ class schedule{
   uint8_t action;
   uint8_t active;
 
-  my_date(uint8_t _action = 0 , uitn8_t _active = 0){
-    action = _action;
-    active = _active;
-  }
+  // schedule(uint8_t _action = 0 , uitn8_t _active = 0){
+  //   action = _action;
+  //   active = _active;
+  // }
 };

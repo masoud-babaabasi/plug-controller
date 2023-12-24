@@ -15,6 +15,7 @@ uint8_t WIFI_connect(uint32_t timeout_con){
       led_state ^= 0x01;
       //digitalWrite(LED_R , led_state);  
       analogWrite(LED_R , led_state * RED_INTENSITY * 2); 
+      pre_time = millis();
       delay(250);
       #if SERIAL_DEBUG == 1
       Serial.print(".");
@@ -23,7 +24,6 @@ uint8_t WIFI_connect(uint32_t timeout_con){
       SerialBT.print(".");
       #endif
       itteration++; 
-      pre_time = millis();
       if( itteration >= 30 ||  millis() - pre_time >= timeout_con){
         #if SERIAL_DEBUG == 1
         Serial.print("\ncould not connect to ");

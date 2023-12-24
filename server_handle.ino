@@ -6,10 +6,10 @@ void handle_http_address(){
     deserializeJson(doc, arg_post);
     const char *add_str = doc[F("address")];
     //memcpy( HTTP_SERVER_ADDRESS , add_str , 255);
-    memset(HTTP_SERVER_BASE , 0 , 255);
+    memset(HTTP_SERVER_BASE , 0 , SERVER_BASE_LENGTH);
     strcpy(HTTP_SERVER_BASE , add_str);
-    for(int i=0 ; i < 255 ; i++)
-      EEPROM.write(SSID_LENGHT * 2 + i , HTTP_SERVER_BASE[i]);
+    for(int i=0 ; i < SERVER_BASE_LENGTH ; i++)
+      EEPROM.write(HTTP_SERVER_BASE_address + i , HTTP_SERVER_BASE[i]);
     EEPROM.commit();
   }
 }
@@ -37,7 +37,7 @@ void handle_WIFICONF(){
     if( s != NULL ) strcpy( ssid , s );
     if( p != NULL ) strcpy( password , p );
     if( id != NULL ) strcpy(device_ID , id);
-    if( WIFI_connect(3000) ){
+    if( WIFI_connect(wifi_connect_time_out) ){
       wifi_connected = 1;
       String string_request_response = F("{\"success\":true,\"msg\":\"WIFI connected.\" , \"data\":\"");
       string_request_response += (WiFi.localIP()).toString() + F("\"}");
@@ -74,12 +74,12 @@ void handle_WIFICONF(){
       memset(HTTP_SERVER_ADDRESS , 0 , 512);      
       // for(int i=0 ; i < 255 ; i++)
       //   HTTP_SERVER_ADDRESS[i] = EEPROM.read(SSID_LENGHT * 2 + i);
-      strncpy(HTTP_SERVER_ADDRESS , HTTP_SERVER_BASE , 256);
+      strncpy(HTTP_SERVER_ADDRESS , HTTP_SERVER_BASE , SERVER_BASE_LENGTH + 1);
       strcat(HTTP_SERVER_ADDRESS , "/api/v1/devices/");
       strcat(HTTP_SERVER_ADDRESS , device_ID);
       strcat(HTTP_SERVER_ADDRESS , "/update");
-      for(int i=0 ; i < 32 ; i++){
-         EEPROM.write(SSID_LENGHT * 2  + 255 + i , device_ID[i]);
+      for(int i=0 ; i < device_ID_LENGTH ; i++){
+         EEPROM.write(device_ID_address + i , device_ID[i]);
       }
       EEPROM.commit();
       if (My_http.begin(My_client, HTTP_SERVER_ADDRESS )) { 
@@ -220,7 +220,7 @@ String get_stat_string(){
 /*******************************************************************************************************************************/
 void handle_WIFIUPDATE(void){
     memset(HTTP_SERVER_ADDRESS , 0 , 512);      
-    strncpy(HTTP_SERVER_ADDRESS , HTTP_SERVER_BASE , 256);
+    strncpy(HTTP_SERVER_ADDRESS , HTTP_SERVER_BASE , SERVER_BASE_LENGTH + 1);
     strcat(HTTP_SERVER_ADDRESS , "/api/v1/files/update/");
 
     if (My_http.begin(My_client, HTTP_SERVER_ADDRESS )) { 
@@ -301,7 +301,7 @@ void handle_change_key_POST(void){
         input_key_enable = 1;
         server.send(200, F("application/json"), F("{\"success\":true,\"status\":\"enable\",\"msg\":\"Input touch key is enabled.\"}"));
       }
-      EEPROM.write(SSID_LENGHT * 2  + 255 + 32 , input_key_enable);
+      EEPROM.write(input_key_enable_address , input_key_enable);
       EEPROM.commit();        
     }else{
       server.send(200, F("application/json"), F("{\"success\":false,\"status\":\"\",\"msg\":\"wrong input.\"}"));
@@ -322,10 +322,25 @@ void handle_key_GET(void){
 void handle_scheduel_set(void){
   String arg_post = server.arg(F("plain"));
   if( arg_post.indexOf(F("crons")) ){
+    strncpy(schedule_json , arg_post.c_str() , MAX_SCHEDULE_JSON_LEN);
+    for(int i=0 ; i < MAX_SCHEDULE_JSON_LEN ; i++)
+          EEPROM.write(schedule_json_address + i , schedule_json[i] );
+    EEPROM.commit();
+    server.send(200, F("application/json"), F("{\"success\":true,\"msg\":\"Schedule received.\"}"));
     deserializeJson(doc, arg_post);
     const char *cron = doc[F("crons")];
+    int cron_nums = doc[F("num")];
+    #if SERIAL_DEBUG == 1
+        Serial.printf("received crons nums = %d\n" , cron_nums);
+        Serial.printf("crons = %s\n" , cron);
+    #endif
     if( cron != NULL ){
 
     }
   }
+  server.send(200, F("application/json"), F("{\"success\":fauls,\"msg\":\"wrong argument.\"}"));
+}
+/*******************************************************************************************************************************/
+void handle_scheduel_get(void){
+  server.send(200, F("application/json"), schedule_json );
 }

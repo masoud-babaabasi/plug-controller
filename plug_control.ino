@@ -15,6 +15,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <AT24Cxx.h>
+#include "ccronexpr.h"
 #include "data_time_class.h"
 /* defines ***************************************************************************************************************************/
 #define I2C_SCL     13
@@ -34,31 +35,51 @@
 #define SERIAL_BAUD   115200
 
 #define SSID_LENGHT           20
+#define SERVER_BASE_LENGTH    255
+#define device_ID_LENGTH      32
 #define ssid_AP               F("Rosha_Controller")
 #define password_AP           F("123456789")
 #define VERSION               1
 #define MAX_SCHEDULE          10
+#define MAX_SCHEDULE_JSON_LEN 511
+
+#define RTC_CHECK_INTERVAL    5
+
+#define wifi_connect_time_out   5000
 /* Global Variables *******************************************************************************************************************/
 char ssid[SSID_LENGHT] ;
 char password[SSID_LENGHT];
-char device_type[32];
-char device_ID[32];
+//char device_type[32];
+char device_ID[device_ID_LENGTH];
+int device_ID_address = SSID_LENGHT * 2  + SERVER_BASE_LENGTH;
+
 char HTTP_SERVER_ADDRESS[512];
-char HTTP_SERVER_BASE[256];
+
+char HTTP_SERVER_BASE[SERVER_BASE_LENGTH + 1] = { 0 };
+int HTTP_SERVER_BASE_address = SSID_LENGHT * 2;
+
 uint64_t device_UID;
 char device_UID_str[24];
 
+char schedule_json[MAX_SCHEDULE_JSON_LEN + 1] = { 0 };
+int schedule_json_address = SSID_LENGHT * 2  + SERVER_BASE_LENGTH + device_ID_LENGTH + 1;
+
 uint8_t relay_output = 0;
+
 uint8_t input_key_enable = 0;
+int input_key_enable_address = SSID_LENGHT * 2  + SERVER_BASE_LENGTH + device_ID_LENGTH;
 
 uint8_t key_val = 0 , pre_key_val = 0;
 
 DS3231        myRTC;
+RTClib        rtc_lib;
+DateTime      rtc_data;
+uint8_t       secs = 0;
 bool          century = false;
 bool          h12Flag;
 bool          pmFlag;
-uint8_t       alarmDay, alarmHour, alarmMinute, alarmSecond, alarmBits;
-bool          alarmDy, alarmH12Flag, alarmPmFlag;
+//uint8_t       alarmDay, alarmHour, alarmMinute, alarmSecond, alarmBits;
+//bool          alarmDy, alarmH12Flag, alarmPmFlag;
 uint32_t      start_time_led_red,start_time;
 uint8_t       led_state = 0;
 StaticJsonDocument<1024> doc;
@@ -96,26 +117,28 @@ void setup() {
   device_UID = (uint64_t)(ESP.getChipId()) | ((uint64_t)(ESP.getFlashChipId()) << 32 );
   sprintf(device_UID_str , "%08x%08x", (uint32_t)(device_UID >> 32) ,  (uint32_t)(device_UID & 0xffffffff));
   /*EEPROM**************************************************/
-  EEPROM.begin(SSID_LENGHT * 2 + 255 + 32 + 1);  
+  EEPROM.begin(SSID_LENGHT * 2 + SERVER_BASE_LENGTH + device_ID_LENGTH + 1 + MAX_SCHEDULE_JSON_LEN);  
   for(int i=0 ; i < SSID_LENGHT ; i++)
     ssid[i] = EEPROM.read(i);
   for(int i=0 ; i < SSID_LENGHT ; i++)
     password[i] = EEPROM.read(SSID_LENGHT + i);
-  for(int i=0 ; i < 255 ; i++)
-    HTTP_SERVER_BASE[i] = EEPROM.read(SSID_LENGHT * 2 + i);
-  for(int i=0 ; i < 32 ; i++)
-    device_ID[i] = EEPROM.read(SSID_LENGHT * 2  + 255 + i);
-  input_key_enable =  EEPROM.read(SSID_LENGHT * 2  + 255 + 32);
+  for(int i=0 ; i < SERVER_BASE_LENGTH ; i++)
+    HTTP_SERVER_BASE[i] = EEPROM.read(HTTP_SERVER_BASE_address + i);
+  for(int i=0 ; i < device_ID_LENGTH ; i++)
+    device_ID[i] = EEPROM.read(device_ID_address + i);
+  input_key_enable =  EEPROM.read(input_key_enable_address);
+  for(int i=0 ; i < MAX_SCHEDULE_JSON_LEN ; i++)
+    schedule_json[i] = EEPROM.read(schedule_json_address + i);
 
   /***********************************************************/
-  strncpy(HTTP_SERVER_ADDRESS , HTTP_SERVER_BASE , 256);
+  strncpy(HTTP_SERVER_ADDRESS , HTTP_SERVER_BASE , SERVER_BASE_LENGTH + 1);
   strcat(HTTP_SERVER_ADDRESS , "/api/v1/devices/");
   strcat(HTTP_SERVER_ADDRESS , device_ID);
   strcat(HTTP_SERVER_ADDRESS , "/update");
    //strcpy(ssid,"RS");
   //strcpy(password,"00000");
 
-  if( WIFI_connect(3000) ){
+  if( WIFI_connect(wifi_connect_time_out) ){
     wifi_connected = 1;
     for(int i=0 ; i < SSID_LENGHT ; i++)
        EEPROM.write(i , ssid[i]);
@@ -192,14 +215,15 @@ void setup() {
   server.on(F("/api/v1/time/get")  ,HTTP_GET ,  handle_get_time_GET);
   server.on(F("/api/v1/time/set")  ,HTTP_POST ,  handle_set_time_POST);
   server.on(F("/api/v1/firmware/update") , HTTP_POST ,  handle_WIFIUPDATE);
-  server.on(F("/api/v1/schedule/set") , HTTP_POST ,  handle_scheduel_set);
+  server.on(F("/api/v1/schedule/status") , HTTP_POST ,  handle_scheduel_set);
+  server.on(F("/api/v1/schedule/status") , HTTP_GET ,  handle_scheduel_get);
 
   myRTC.setClockMode(false);  // set to 24h
   server.begin(); 
   start_time_led_red = millis(); 
   start_time = millis(); 
 
-  alarm_times[0].hour = 10;
+  // alarm_times[0].hour = 10;
 }
 
 void loop() {
@@ -212,7 +236,13 @@ void loop() {
       led_state = 0x01; // always on when hotspot is ON 
     }
     //digitalWrite(LED_R , led_state); 
-    analogWrite(LED_R , led_state * RED_INTENSITY);   
+    analogWrite(LED_R , led_state * RED_INTENSITY);
+
+    secs++; // every RTC_CHECK_INTERVAL seconds check the data of ds3231 module
+    if( secs == RTC_CHECK_INTERVAL){
+      secs = 0;
+      rtc_data = rtc_lib.now();
+    }
   }
   if( millis() - start_time >= 100){
     start_time = millis(); 
@@ -222,7 +252,7 @@ void loop() {
       digitalWrite(LED_G , LOW); 
     }
   }
-  if( input_key_enable ) {
+  if( input_key_enable ) { // if hardware input button is enabled 
     pre_key_val = key_val;
     key_val = digitalRead(KEY_IN);
     if( pre_key_val == 0 && key_val == 1){
