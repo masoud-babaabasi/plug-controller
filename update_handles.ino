@@ -1,23 +1,23 @@
 void update_started() {
-  #if SERIAL_DEBUG == 1
+  #if SERIAL_DEBUG >= 1
   Serial.println(F("CALLBACK:  HTTP update process started"));
   #endif
 }
 
 void update_finished() {
-  #if SERIAL_DEBUG == 1
+  #if SERIAL_DEBUG >= 1
   Serial.println(F("CALLBACK:  HTTP update process finished"));
   #endif
 }
 
 void update_progress(int cur, int total) {
-  #if SERIAL_DEBUG == 1
+  #if SERIAL_DEBUG >= 1
   Serial.printf("CALLBACK:  HTTP update process at %d of %d bytes...\n", cur, total);
   #endif
 }
 
 void update_error(int err) {
-  #if SERIAL_DEBUG == 1
+  #if SERIAL_DEBUG >= 1
   Serial.printf("CALLBACK:  HTTP update fatal error code %d\n", err);
   #endif
 }

@@ -91,7 +91,8 @@ ESP8266WebServer server(80);
 WiFiClient My_client;
 HTTPClient My_http;
 
-schedule crons[MAX_SCHEDULE];
+schedule alarm_crons[MAX_SCHEDULE] = {0};
+int cron_nums = 0;
 
 /* Fuction prototyps *************************************************************************************************************/
 uint8_t WIFI_connect(uint32_t timeout_con);
@@ -99,7 +100,7 @@ void handle_WIFI_satatus();
 String get_stat_string();
 void handle_http_address();
 void handle_update_file(const char *file_address);
-
+void handel_cron_expresions_function(const char *input_expresions , int nums);
 /*Set Up function******************************************************************************************************************/
 void setup() {
   pinMode(LED_W, OUTPUT);     
@@ -137,6 +138,37 @@ void setup() {
   strcat(HTTP_SERVER_ADDRESS , "/update");
    //strcpy(ssid,"RS");
   //strcpy(password,"00000");
+  if( strstr(schedule_json ,"crons") ){
+    deserializeJson(doc, schedule_json);
+    const char *cron = doc[F("crons")];
+    cron_nums = doc[F("num")];
+    #if SERIAL_DEBUG >= 1
+        Serial.printf("received crons nums = %d\n" , cron_nums);
+        Serial.printf("crons = %s\n" , cron);
+    #endif
+    if( cron_nums > MAX_SCHEDULE){
+      cron_nums = MAX_SCHEDULE;
+      #if SERIAL_DEBUG >= 1
+        Serial.printf("received crons is bigger than max schedule(max = %d)",MAX_SCHEDULE);
+      #endif
+    }
+    /*
+    cron fields : 
+      1-minute(0-59) 
+      2-hour(0-23) 
+      3-date(1-31) 
+      4-month(1-12) 
+      5-dayOfWeek(0-6) 
+      6-year 
+      7-action(0:off 1:on 2:toggle) 
+      8-activation(0:disable 1:enable)] 
+    seconds is always considerd zero
+    */
+    if( cron != NULL ){
+      handel_cron_expresions_function(cron , cron_nums);
+    }
+  }
+
 
   if( WIFI_connect(wifi_connect_time_out) ){
     wifi_connected = 1;
@@ -145,7 +177,7 @@ void setup() {
    for(int i=0 ; i < SSID_LENGHT ; i++)
      EEPROM.write(SSID_LENGHT + i , password[i]);
    EEPROM.commit();
-    #if SERIAL_DEBUG == 1
+    #if SERIAL_DEBUG >= 1
     Serial.println(F("WiFi connected."));
     Serial.println(ssid);
     Serial.println(password);
@@ -154,7 +186,7 @@ void setup() {
     #endif
     
     if (My_http.begin(My_client, HTTP_SERVER_ADDRESS )) { 
-      #if SERIAL_DEBUG == 1
+      #if SERIAL_DEBUG >= 1
       Serial.print(F("[HTTP] POST...\n"));
       #endif
       My_http.addHeader(F("Content-Type"), F("application/json"));
@@ -167,23 +199,23 @@ void setup() {
       post_body += F("\",\"unique_id\":\"");
       post_body += device_UID_str;
       post_body += F("\"}");
-      #if SERIAL_DEBUG == 1
+      #if SERIAL_DEBUG >= 1
       Serial.print("http server addres: ");Serial.println(HTTP_SERVER_ADDRESS);
       Serial.print("Post body:");Serial.println(post_body);
       #endif
       int httpCode = My_http.POST(post_body);
       if (httpCode > 0) {
-        #if SERIAL_DEBUG == 1
+        #if SERIAL_DEBUG >= 1
         Serial.printf_P(PSTR("[HTTP] POST... code: %d\n"), httpCode);
         #endif
         if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
           String payload = My_http.getString();
-          #if SERIAL_DEBUG == 1
+          #if SERIAL_DEBUG >= 1
           Serial.println(payload);
           #endif
         }
       } else {
-        #if SERIAL_DEBUG == 1
+        #if SERIAL_DEBUG >= 1
         Serial.printf_P(PSTR("[HTTP] GET... failed, error: %s\n"), My_http.errorToString(httpCode).c_str());
         #endif
       }
@@ -193,7 +225,7 @@ void setup() {
   if( wifi_connected != 1){
     WiFi.mode(WIFI_STA);
     WiFi.softAP(ssid_AP, password_AP);
-    #if SERIAL_DEBUG == 1
+    #if SERIAL_DEBUG >= 1
     Serial.println(F("WiFi  not connected."));
     Serial.println(F("Hot spot created:"));
     Serial.print("ssid_AP : ");
