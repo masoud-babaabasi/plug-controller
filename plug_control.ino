@@ -30,7 +30,7 @@
 #define i2c_address 0x50
 
 #define RED_INTENSITY     10
-#define SERIAL_DEBUG      1
+#define SERIAL_DEBUG      2
 
 #define SERIAL_BAUD   115200
 
@@ -94,6 +94,8 @@ HTTPClient My_http;
 schedule alarm_crons[MAX_SCHEDULE] = {0};
 int cron_nums = 0;
 
+uint8_t pre_minute = -1 , now_minute = 0;
+
 /* Fuction prototyps *************************************************************************************************************/
 uint8_t WIFI_connect(uint32_t timeout_con);
 void handle_WIFI_satatus();
@@ -101,6 +103,7 @@ String get_stat_string();
 void handle_http_address();
 void handle_update_file(const char *file_address);
 void handel_cron_expresions_function(const char *input_expresions , int nums);
+uint8_t check_alarm_condition(uint8_t num);
 /*Set Up function******************************************************************************************************************/
 void setup() {
   pinMode(LED_W, OUTPUT);     
@@ -273,7 +276,32 @@ void loop() {
     secs++; // every RTC_CHECK_INTERVAL seconds check the data of ds3231 module
     if( secs == RTC_CHECK_INTERVAL){
       secs = 0;
-      rtc_data = rtc_lib.now();
+      now_minute = myRTC.getMinute();
+      if( pre_minute != now_minute){ // check to see if minute has changed
+        pre_minute = now_minute;
+        rtc_data = rtc_lib.now(); // if minute changed check the cron alarms
+        for(uint8_t i = 0 ; i < cron_nums ; i++){
+          if( alarm_crons[i].active && check_alarm_condition(i) ){
+            switch(alarm_crons[i].action){
+              case 0 :
+                digitalWrite(RELAY , LOW);
+                relay_output = 0;
+                break;
+              case 1 :
+                digitalWrite(RELAY , HIGH);
+                relay_output = 1;
+                break;
+              case 2 :
+                relay_output ^= 1;
+                digitalWrite(RELAY , relay_output); 
+                break;
+              default:
+              digitalWrite(RELAY , LOW);
+                relay_output = 0;
+            }
+          }
+        }
+      }
     }
   }
   if( millis() - start_time >= 100){
@@ -292,4 +320,14 @@ void loop() {
       digitalWrite(RELAY , relay_output); 
     }
   }            
+}
+/******************************************************************/
+uint8_t check_alarm_condition(uint8_t num){
+  if( cron_get_bit(alarm_crons[num].date_time.minutes , rtc_data.minute()) == 0) return 0;
+  if( cron_get_bit(alarm_crons[num].date_time.hours , rtc_data.hour()) == 0)return 0;
+  if( cron_get_bit(alarm_crons[num].date_time.days_of_month , rtc_data.day() - 1) == 0) return 0;
+  if( cron_get_bit(alarm_crons[num].date_time.days_of_week , myRTC.getDoW()) == 0) return 0;
+  if( cron_get_bit(alarm_crons[num].date_time.months , rtc_data.month() - 1) == 0) return 0;
+  if( alarm_crons[num].year != -1 && alarm_crons[num].year != rtc_data.year() ) return 0;
+  return 1;
 }
