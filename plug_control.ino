@@ -30,7 +30,7 @@
 #define i2c_address 0x50
 
 #define RED_INTENSITY     10
-#define SERIAL_DEBUG      2
+#define SERIAL_DEBUG      1
 
 #define SERIAL_BAUD   115200
 
@@ -244,7 +244,7 @@ void setup() {
   server.on(F("/api/v1/wifi/address")  ,HTTP_POST ,  handle_http_address);
   server.on(F("/api/v1/wifi/address")  ,HTTP_GET ,  handle_http_address_GET);
   server.on(F("/api/v1/change/status")  ,HTTP_POST ,  handle_change_status_POST);
-  server.on(F("/api/v1/change/key")  ,HTTP_POST ,  handle_change_key_POST);
+  server.on(F("/api/v1/change/key")  ,HTTP_POST ,  handle_change);
   server.on(F("/api/v1/status")  ,HTTP_GET ,  handle_status_GET);
   server.on(F("/api/v1/key")  ,HTTP_GET ,  handle_key_GET);
   server.on(F("/api/v1/time/get")  ,HTTP_GET ,  handle_get_time_GET);
@@ -304,22 +304,22 @@ void loop() {
       }
     }
   }
-  if( millis() - start_time >= 100){
+  if( millis() - start_time >= 50){
     start_time = millis(); 
     if( relay_output ){
       digitalWrite(LED_G , HIGH); 
     }else{
       digitalWrite(LED_G , LOW); 
     }
-  }
-  if( input_key_enable ) { // if hardware input button is enabled 
+    if( input_key_enable ) { // if hardware input button is enabled 
     pre_key_val = key_val;
     key_val = digitalRead(KEY_IN);
     if( pre_key_val == 0 && key_val == 1){
       relay_output ^= 1;
       digitalWrite(RELAY , relay_output); 
     }
-  }            
+  }  
+  }          
 }
 /******************************************************************/
 uint8_t check_alarm_condition(uint8_t num){
