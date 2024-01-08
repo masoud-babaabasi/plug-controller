@@ -244,7 +244,7 @@ void setup() {
   server.on(F("/api/v1/wifi/address")  ,HTTP_POST ,  handle_http_address);
   server.on(F("/api/v1/wifi/address")  ,HTTP_GET ,  handle_http_address_GET);
   server.on(F("/api/v1/change/status")  ,HTTP_POST ,  handle_change_status_POST);
-  server.on(F("/api/v1/change/key")  ,HTTP_POST ,  handle_change);
+  server.on(F("/api/v1/change/key")  ,HTTP_POST ,  handle_change_key_POST);
   server.on(F("/api/v1/status")  ,HTTP_GET ,  handle_status_GET);
   server.on(F("/api/v1/key")  ,HTTP_GET ,  handle_key_GET);
   server.on(F("/api/v1/time/get")  ,HTTP_GET ,  handle_get_time_GET);
@@ -325,7 +325,7 @@ void loop() {
 uint8_t check_alarm_condition(uint8_t num){
   if( cron_get_bit(alarm_crons[num].date_time.minutes , rtc_data.minute()) == 0) return 0;
   if( cron_get_bit(alarm_crons[num].date_time.hours , rtc_data.hour()) == 0)return 0;
-  if( cron_get_bit(alarm_crons[num].date_time.days_of_month , rtc_data.day() - 1) == 0) return 0;
+  if( cron_get_bit(alarm_crons[num].date_time.days_of_month , rtc_data.day()) == 0) return 0;
   if( cron_get_bit(alarm_crons[num].date_time.days_of_week , myRTC.getDoW()) == 0) return 0;
   if( cron_get_bit(alarm_crons[num].date_time.months , rtc_data.month() - 1) == 0) return 0;
   if( alarm_crons[num].year != -1 && alarm_crons[num].year != rtc_data.year() ) return 0;
